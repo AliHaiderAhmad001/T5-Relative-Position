@@ -1,2 +1,30 @@
-# T5-Relative-Position
+# Relative position embeddings according to T5 paper
 Implementation for the Relative Position model introduced by T5 (Raffel et al. 2020) Alongside a Comprehensive Demonstration.
+
+
+The part of the paper that deals with position embeddings:
+
+> Since self-attention is order-independent (i.e. it is an operation on sets), it is common to provide an explicit position signal to the Transformer. While the original Transformer used a sinusoidal position signal or learned position embeddings, it has recently become more common to use relative position embeddings (Shaw et al., 2018; Huang et al., 2018a). Instead of using a fixed embedding for each position, relative position embeddings produce a different learned embedding according to the offset between the “key” and “query” being compared in the self-attention mechanism. We use a simplified form of position embeddings where each “embedding” is simply a scalar that is added to the corresponding logit used for computing the attention weights. For efficiency, we also share the position embedding parameters across all layers in our model, though within a given layer each attention head uses a different learned position embedding. Typically, a fixed number of embeddings are learned, each corresponding to a range of possible key-query offsets. In this work, we use 32 embeddings for all of our models with ranges that increase in size logarithmically up to an offset of 128 beyond which we assign all relative positions to the same embedding. Note that a given layer is insensitive to relative position beyond 128 tokens, but subsequent layers can build a sensitivity to larger offsets by combining local information from previous layers.
+
+Well, their approach can seem a little confusing due to the use of algorithms, which is why you won't find many online hobbyists like me implementing this approach. Personally, I searched and only found the original implementation in TensorFlow.
+
+Let's make it as simple as possible:
+* They adopt the approach of (Shaw et al., 2018; Huang et al., 2018a). That is, they adopt the idea of relative positional representations by modifying the attention matrix. But what's new?
+* Instead of using high-dimensional embedding vectors to encode relative distances, they use scalar values. That is, instead of using a vector from d dimension to represent the relative distance -2, they use a scalar value. Therefore the relative distance -2 is given a scalar value to represent it. So the embeddings here are scalar values. Nice! this reduces spatial complexity.
+* They merely modify the attention matrix, and do not modify the value matrix as their predecessors did. This is sufficient, as the experiments showed, modifying the value matrix did not improve performance. And this another reduction for spatial complexity.
+* Instead of using 2k+1 embedding vectors, they only use 32 ones.
+* Their predecessors shared the embedding parameters across different attention heads and across all layers. Whereas here they share it across layers but use different parameters across heads. That is, embedding the first head in the first layer is the same as embedding the first head in the second layer. But the first head is different from the second. This allows each head to capture certain positional information that the rest may not.
+
+**Now how do things work?**
+1. First we have what is called `num_buckets` which indicates the number of embeddings (in our case it is 32), and we have another variable `max_distance`, in addition to a complex logarithmic function.
+2. Two separate equal sets of embeddings are allocated, one for close distances and one for farther distances. For example, in our case we have 32 embeddings, so 16 of them are reserved for encoding close distances and the other 16 are reserved for longer distances. For close distances, they give each relative distance its own unique embedding. Well this is similar to what their ancestors were doing (this is necessary for precise). As for long distances, a complex logarithmic function is used to sort the relative distances into groups (binning). For example, in our case, relative distances from 8 onwards (since it is bidirectional, i.e. there are relative distances from right and left, the number of embeddings from each direction will be 8) are sorted into groups, each group having a shared embedding. For example, relative distances from 8 to 12 have a shared one, relative distances from 12 to 16 have another one, and so on until we reach the maximum relative distance `max_distance`. Starting from `max_distance` all relative distances are the same as the last set. Of course, the number of elements in each group increases as we move away from the center. For example, the number of relative distances in the first group may be 4, while the third group may have 7, and so on. This approach may be better than simply associating all relative distances beyond a certain threshold with the same embedding.
+Unusually, I won't explain the mathematics behind the logarithmic function used, I think that's boring, and I don't see the point in doing so. Nor did the authors of the paper do so. So leave it alone, but understand its role.
+
+**Analysis**
+* This approach clearly focuses on reducing the number of parameters while maintaining good performance compared to their predecessors, and this was logical, given the results of experiments conducted on their predecessors' method, for example modifying the matrix of values did not give an improvement.
+* This approach uses embeddings that can be learned during training. This allows the position information to adapt to the task at hand, but it also makes the model vulnerable to overfitting.
+* Is this approach bounded or unbounded (i.e. can it generalize to arbitrary lengths)? Actually no, it is true that this approach can work with arbitrary lengths except that it clips after a certain distance (after a certain distance it becomes distance-aware), giving all distances the same embedding after a certain distance.
+
+
+**Ref**
+* [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
