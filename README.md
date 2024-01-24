@@ -27,4 +27,5 @@ Unusually, I won't explain the mathematics behind the logarithmic function used,
 
 
 **Ref**
+* [T5 paper](https://arxiv.org/abs/1910.10683).
 * [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
